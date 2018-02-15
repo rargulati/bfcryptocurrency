@@ -22,10 +22,10 @@ func main() {
 	n.Router = r
 	n.Router.HandleFunc("/", YourHandler)
 	n.Router.HandleFunc("/peers", n.PeersHandler).Methods("GET")
-	n.Router.HandleFunc("/gossip/", n.GossipHandler).Methods("POST")
+	n.Router.HandleFunc("/gossip", n.GossipHandler).Methods("POST")
 
 	// Bind to a port and pass our router in
-	log.Fatal(http.ListenAndServe(":8000", n.Router))
+	log.Fatal(http.ListenAndServe("localhost:8000", n.Router))
 }
 
 func YourHandler(w http.ResponseWriter, r *http.Request) {

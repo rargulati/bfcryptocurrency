@@ -43,7 +43,7 @@ type Node struct {
 	Router    *mux.Router
 	transport http.RoundTripper
 
-	Queue *BroadcastQueue
+	// Queue *BroadcastQueue
 	cache *MemberList
 	State *BookState
 
@@ -57,10 +57,10 @@ type Node struct {
 }
 
 type Message struct {
-	ID       uuid.UUID
-	Port     string
-	Version  update
-	TTL      time.Duration
+	ID      uuid.UUID
+	Port    string
+	Version update
+	// TTL      time.Duration
 	Favorite *Book
 }
 
@@ -73,9 +73,9 @@ func NewNode() *Node {
 			nodes:   make([]*Node, 0),
 			nodeMap: make(map[string]*Node, 0),
 		},
-		Queue: &BroadcastQueue{
-			Messages: make([]*Message, 0),
-		},
+		// Queue: &BroadcastQueue{
+		// 	Messages: make([]*Message, 0),
+		// },
 		tracker: updateTracker{
 			current: 0,
 			seen:    make(map[update]bool),
@@ -101,12 +101,23 @@ func (n *Node) init() {
 			panic("Failed to parse books")
 		}
 		go n.resampleFavoriteBook()
+		go n.acceptIncoming()
 		go n.sendStateLoop()
 	})
 }
 
-func acceptIncomingLoop() {
-
+func (n *Node) acceptIncomingLoop() {
+	t := time.NewTimer(1)
+	defer t.Stop()
+	for {
+		select {
+		case <-t.C:
+			n.acceptIncoming()
+			t.Reset(100 * time.Millisecond)
+		case <-n.ctx.Done():
+			return
+		}
+	}
 }
 
 func (n *Node) acceptIncoming() {
@@ -116,16 +127,15 @@ func (n *Node) acceptIncoming() {
 			n.outgoingMessage <- message
 		}
 	}
-	n.Queue.mu.Lock()
-	broadcasts := n.Queue.Messages
-	n.Queue.mu.Unlock()
-	for _, message := range broadcasts {
-		n.outgoingMessage <- message
-	}
 }
 
-func processMessage() {
-
+func (n *Node) ProcessIncomingGossip(m *Message) error {
+	// debug
+	// fmt.Println("Message: %+v", m)
+	// fmt.Println("Message: %#v", m)
+	// TODO: do error type checking
+	n.incomingMessage <- m
+	return nil
 }
 
 func (n *Node) sendStateLoop() {
@@ -143,7 +153,6 @@ func (n *Node) sendStateLoop() {
 }
 
 func (n *Node) sendState() {
-
 	// TODO: choose a random node?
 	n.cache.mu.Lock()
 	nodes := n.cache.nodes
@@ -194,6 +203,38 @@ func randomOffset(n int) int {
 	return int(rand.Uint32() % uint32(n))
 }
 
+// TODO: pass in current sequence number
+// func (n *Node) pendingBroadcasts() []*Message {
+// 	n.Queue.mu.Lock()
+// 	bcasts := n.Queue.Messages
+// 	msgs := make([]*Message, len(bcasts))
+// 	copy(msgs, bcasts)
+// 	n.Queue.mu.Unlock()
+
+// 	return msgs
+// }
+
+func (n *Node) createNewBroadcastMessage(b *Book, p string) *Message {
+	id, err := uuid.NewV4()
+	if err != nil {
+		panic("error generating new uuid")
+	}
+
+	n.trackerLock.Lock()
+	current := n.tracker.current
+	n.tracker.current++
+	n.trackerLock.Unlock()
+
+	m := &Message{
+		ID:      id,
+		Port:    p,
+		Version: current,
+		// TTL:      time.Duration(1 * time.Second),
+		Favorite: b,
+	}
+	return m
+}
+
 func (n *Node) resampleFavoriteBook() {
 	t := time.NewTimer(1)
 	defer t.Stop()
@@ -209,17 +250,6 @@ func (n *Node) resampleFavoriteBook() {
 	}
 }
 
-// TODO: pass in current sequence number
-func (n *Node) getBroadcasts() []*Message {
-	n.Queue.mu.Lock()
-	bcasts := n.Queue.Messages
-	msgs := make([]*Message, len(bcasts))
-	copy(msgs, bcasts)
-	n.Queue.mu.Unlock()
-
-	return msgs
-}
-
 func (n *Node) selectFavoriteBook() {
 	r := rand.Intn(len(n.State.Books)-1) + 1
 	n.State.mu.Lock()
@@ -231,31 +261,10 @@ func (n *Node) selectFavoriteBook() {
 	n.State.mu.Unlock()
 
 	// add it to the broadcast queue
-	n.Queue.mu.Lock()
-	n.Queue.Messages = append(n.Queue.Messages, m)
-	n.Queue.mu.Unlock()
-}
-
-func (n *Node) createNewBroadcastMessage(b *Book, p string) *Message {
-	id, err := uuid.NewV4()
-	if err != nil {
-		panic("error generating new uuid")
-	}
-
-	n.trackerLock.Lock()
-	current := n.tracker.current
-	n.tracker.current++
-	n.trackerLock.Unlock()
-
-	m := &Message{
-		ID:   id,
-		Port: p,
-		// Version:  v, // seq number
-		Version:  current,
-		TTL:      time.Duration(1 * time.Second),
-		Favorite: b,
-	}
-	return m
+	n.incomingMessage <- m
+	// n.Queue.mu.Lock()
+	// n.Queue.Messages = append(n.Queue.Messages, m)
+	// n.Queue.mu.Unlock()
 }
 
 func getBooks(path string) ([]Book, error) {
@@ -272,14 +281,4 @@ func getBooks(path string) ([]Book, error) {
 		books = append(books, Book(str))
 	}
 	return books, nil
-}
-
-func (n *Node) PeersHandler(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("Peers!\n"))
-}
-
-func (n *Node) GossipHandler(w http.ResponseWriter, r *http.Request) {
-	// unmarshal the json
-	// pass this to the
-	w.Write([]byte("Gossip!\n"))
 }
