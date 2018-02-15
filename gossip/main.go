@@ -1,70 +1,33 @@
 package main
 
 import (
-	"bufio"
+	"log"
 	"math/rand"
-	"os"
-	"sync"
+	"net/http"
+	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/rargulati/blockchain-class/gossip/node"
 )
 
-// Node state
-type Node struct {
-	Router *mux.Router
-	// Peer
-	// favorite book
-	// List of books that we know about
-	// Protocol
-	bs *BookState
+func init() {
+	// Seed the random number generator
+	rand.Seed(time.Now().UnixNano())
 }
-
-type BookState struct {
-	Favorite *Book
-	mu       sync.Mutex //guards Book
-	Books    []Book
-	initOnce sync.Once //ensure list of books grabbed only once
-}
-
-type Book string
 
 func main() {
-	// initialize application
-	// select favorite book at random in a goroutine
-	n := NewNode()
-	n.bs.initOnce.Do(func() {
-		var err error
-		n.bs.Books, err = getBooks("book_list.txt")
-		if err != nil {
-			panic("Failed to parse books")
-		}
-		go n.resampleFavoriteBook()
-	})
+	// TODO: command line setttings ie file path
+	n := node.NewNode()
+	r := mux.NewRouter()
+	n.Router = r
+	n.Router.HandleFunc("/", YourHandler)
+	n.Router.HandleFunc("/peers", n.PeersHandler).Methods("GET")
+	n.Router.HandleFunc("/gossip/", n.GossipHandler).Methods("POST")
+
+	// Bind to a port and pass our router in
+	log.Fatal(http.ListenAndServe(":8000", n.Router))
 }
 
-func NewNode() *Node {
-	return &Node{}
-}
-
-func (n *Node) resampleFavoriteBook() {
-	r := rand.Intn(len(n.bs.Books) - 0)
-	n.bs.mu.Lock()
-	n.bs.Favorite = &n.bs.Books[r]
-	n.bs.mu.Unlock()
-}
-
-func getBooks(path string) ([]Book, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	scanner.Split(bufio.ScanLines)
-	books := make([]Book, 0)
-	for scanner.Scan() {
-		str := scanner.Text()
-		books = append(books, Book(str))
-	}
-	return books, nil
+func YourHandler(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("Gorilla!\n"))
 }
