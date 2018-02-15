@@ -26,15 +26,16 @@ type BookState struct {
 	initOnce sync.Once //ensure list of books grabbed only once
 }
 
-type BroadcastQueue struct {
-	Messages []*Message
-	mu       sync.Mutex
-}
+// Deprecated: original idea
+// type BroadcastQueue struct {
+// 	Messages []*Message
+// 	mu       sync.Mutex
+// }
 
 type MemberList struct {
-	nodes   []*Node
-	nodeMap map[string]*Node // Addr.String() -> Node
-	mu      sync.Mutex
+	members   []string
+	memberMap map[string]*Book // Addr.String() -> Node
+	mu        sync.Mutex
 }
 
 type Node struct {
@@ -70,8 +71,8 @@ func NewNode() *Node {
 			Books: make([]Book, 0),
 		},
 		cache: &MemberList{
-			nodes:   make([]*Node, 0),
-			nodeMap: make(map[string]*Node, 0),
+			members:   make([]string, 0),
+			memberMap: make(map[string]*Book, 0),
 		},
 		// Queue: &BroadcastQueue{
 		// 	Messages: make([]*Message, 0),
@@ -124,9 +125,23 @@ func (n *Node) acceptIncoming() {
 	for message := range n.incomingMessage {
 		isNew := n.tracker.See(message.Version)
 		if isNew {
+			n.updateState(message)
 			n.outgoingMessage <- message
 		}
 	}
+}
+
+func (n *Node) updateState(m *Message) {
+	// add this message to our list
+	n.cache.mu.Lock()
+	_, ok := n.cache.memberMap[m.Port]
+	if !ok {
+		// we don't know this peer
+		// TODO: add this peer to our list
+		return
+	}
+	n.cache.memberMap[m.Port] = m.Favorite
+	n.cache.mu.Unlock()
 }
 
 func (n *Node) ProcessIncomingGossip(m *Message) error {
@@ -155,12 +170,12 @@ func (n *Node) sendStateLoop() {
 func (n *Node) sendState() {
 	// TODO: choose a random node?
 	n.cache.mu.Lock()
-	nodes := n.cache.nodes
+	members := n.cache.members
 	n.cache.mu.Unlock()
 
 	for outgoing := range n.outgoingMessage {
-		for _, node := range nodes {
-			url := fmt.Sprintf("%s/gossip/", node.jointHostPort(node.Addr.String(), node.Port))
+		for _, member := range members {
+			url := fmt.Sprintf("%s/gossip/", member)
 			msg, err := json.Marshal(struct {
 				Message *Message
 			}{
@@ -195,24 +210,12 @@ func randNode(nodes []*Node) *Node {
 	// idx := rand.Intn(len(nodes)-1) + 1 // get a random number
 	// idx := randomOffset(len(nodes)) // find our random offset
 	idx := rand.Int31n(int32(len(nodes) - 1))
-	// fmt.Println(idx)
 	return nodes[idx] // return our random node
 }
 
 func randomOffset(n int) int {
 	return int(rand.Uint32() % uint32(n))
 }
-
-// TODO: pass in current sequence number
-// func (n *Node) pendingBroadcasts() []*Message {
-// 	n.Queue.mu.Lock()
-// 	bcasts := n.Queue.Messages
-// 	msgs := make([]*Message, len(bcasts))
-// 	copy(msgs, bcasts)
-// 	n.Queue.mu.Unlock()
-
-// 	return msgs
-// }
 
 func (n *Node) createNewBroadcastMessage(b *Book, p string) *Message {
 	id, err := uuid.NewV4()

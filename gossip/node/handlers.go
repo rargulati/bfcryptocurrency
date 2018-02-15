@@ -6,6 +6,29 @@ import (
 )
 
 func (n *Node) PeersHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("Allow", "OPTIONS,GET")
+	if r.Method == "OPTIONS" {
+		return
+	}
+	if r.Method != "GET" {
+		http.Error(w, "Invalid Method", 400)
+		return
+	}
+
+	// var v struct {
+	// 	Peer *Peer
+	// }
+	// if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
+	// 	http.Error(w, "Invalid JSON", 400)
+	// 	return
+	// }
+	// // pass off the gossip to our node
+	// if err := n.ProcessIncomingPeer(v.Peer); err != nil {
+	// 	http.Error(w, "Invalid Message", 400)
+	// 	return
+	// }
+
+	// fin
 	w.Write([]byte("Peers!\n"))
 }
 
