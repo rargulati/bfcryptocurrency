@@ -7,15 +7,15 @@ import (
 )
 
 type Node struct {
-	Left   *Node
-	Right  *Node
-	Parent *Node
+	left   *Node
+	right  *Node
+	parent *Node
 	hash   string
 	data   string
 }
 
 type MerkleTree struct {
-	Root       *Node
+	root       *Node
 	merkleRoot hash.Hash
 	leafs      []*Node
 }
@@ -34,16 +34,16 @@ func BuildSubTrees(leafs []*Node) (*Node, error) {
 		// intermediate := append([]byte(leafs[i].hash), []byte(leafs[i+1].hash)...)
 		intermediate := fmt.Sprintf("%s%s", leafs[i].hash, leafs[i+1].hash)
 		h := hashData(intermediate)
-		fmt.Printf("HASH OF intermediate(%d): %s\n", i, h)
+		fmt.Printf("HASH of intermediate(%d): %s\n", i, h)
 		n := &Node{
-			Left:  leafs[i],
-			Right: leafs[i+1],
+			left:  leafs[i],
+			right: leafs[i+1],
 			hash:  h,
 		}
 		nodes = append(nodes, n)
 		// set our parent node for our new sub-tree nodes
-		leafs[i].Parent = n
-		leafs[i+1].Parent = n
+		leafs[i].parent = n
+		leafs[i+1].parent = n
 		// We're working at the last layer, we're the root
 		if len(leafs) == 2 {
 			return n, nil
@@ -58,6 +58,7 @@ func NewMerkleTree(data []string) *MerkleTree {
 	m := &MerkleTree{}
 	// create and populate the leaf layer of the merkle tree
 	for _, s := range data {
+		// TODO: avoid pre-image attacks with padding our data
 		n := &Node{
 			data: s,
 			hash: hashData(s),
@@ -65,6 +66,7 @@ func NewMerkleTree(data []string) *MerkleTree {
 		m.leafs = append(m.leafs, n)
 	}
 	// odd case - where we have an odd number of leaves
+	// pad with an empty string
 	if len(m.leafs)%2 == 1 {
 		m.leafs = append(m.leafs, &Node{data: "", hash: hashData("")})
 	}
