@@ -73,7 +73,6 @@ func BuildSubTrees(leafs []*Node) (*Node, error) {
 			return n, nil
 		}
 	}
-	fmt.Println(len(nodes))
 	// recursively call this with our new layer
 	return BuildSubTrees(nodes)
 }

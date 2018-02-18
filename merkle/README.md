@@ -7,6 +7,8 @@
 * Do not use any special padding for leaf vs internal nodes
 * The merkle root should be equal to `c4f66b2f97c9fb2fcb58b08b4f260d396b5c972ff4948c7deccc81fa34db1a44`
 
+EDIT: with sha2, correct root hash is actually `4a359c93d6b6c9beaa3fe8d8e68935aa5b5081bd2603549af88dee298fbfdd0a`
+
 Bonus: create a padding scheme so that arbitrary numbers of blocks can be Merkleized.
 
 Bonus 2: add different padding to the leaves as opposed to internal nodes, so that preimage attacks are impossible.
