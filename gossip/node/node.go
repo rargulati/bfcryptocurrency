@@ -58,10 +58,10 @@ type Node struct {
 }
 
 type Message struct {
-	ID      uuid.UUID
-	Port    string
-	Version update
-	// TTL      time.Duration
+	ID       uuid.UUID
+	Port     string
+	Version  update
+	TTL      time.Duration
 	Favorite *Book
 }
 
