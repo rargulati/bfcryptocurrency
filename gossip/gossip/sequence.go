@@ -1,4 +1,4 @@
-package node
+package gossip
 
 // TODO: sync.atomic
 type update int64

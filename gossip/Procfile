@@ -1,0 +1,5 @@
+node1: go run main.go -l 2701
+node2: go run main.go -l 2702 
+node3: go run main.go -l 2703 
+#node4: go run main.go -l 2704 
+#node5: go run main.go -l 2705

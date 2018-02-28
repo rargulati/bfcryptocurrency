@@ -2,13 +2,14 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/rargulati/blockchain-class/gossip/node"
+	node "github.com/rargulati/blockchain-class/gossip/gossip"
 )
 
 func init() {
@@ -25,15 +26,17 @@ func main() {
 	}
 
 	// TODO: command line setttings ie file path
-	n := node.NewNode()
+	n := node.NewNode(*listenF)
 	r := mux.NewRouter()
 	n.Router = r
 	n.Router.HandleFunc("/", IndexHandler)
 	n.Router.HandleFunc("/peers", n.PeersHandler).Methods("GET")
-	n.Router.HandleFunc("/gossip", n.GossipHandler).Methods("POST")
+	n.Router.HandleFunc("/gossip/", n.GossipHandler).Methods("POST")
 
 	// Bind to a port and pass our router in
-	log.Fatal(http.ListenAndServe("localhost:8000", n.Router))
+	lis := fmt.Sprintf(":%d", *listenF)
+	log.Printf("Listening at: %s\n", lis)
+	log.Fatal(http.ListenAndServe(lis, n.Router))
 }
 
 func IndexHandler(w http.ResponseWriter, r *http.Request) {
