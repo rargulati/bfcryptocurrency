@@ -3,8 +3,11 @@ package main
 import (
 	"crypto/sha256"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
+
+	crand "crypto/rand"
 
 	"github.com/agl/ed25519"
 )
@@ -12,7 +15,6 @@ import (
 const workFactor = 4
 
 type Block struct {
-	content      string
 	previousHash string
 	hash         string
 	nonce        int64
@@ -24,8 +26,8 @@ type Blockchain struct {
 }
 
 type Transaction struct {
-	from      *Ed25519PublicKey
-	to        *Ed25519PublicKey
+	from      *Account
+	to        *Account
 	amount    int
 	signature string
 }
@@ -37,6 +39,20 @@ type Ed25519PrivateKey struct {
 
 type Ed25519PublicKey struct {
 	k *[32]byte
+}
+
+type Account struct {
+	name    string
+	pubKey  *Ed25519PublicKey
+	privKey *Ed25519PrivateKey
+}
+
+func NewKey(src io.Reader) (*Ed25519PrivateKey, *Ed25519PublicKey, error) {
+	pub, priv, err := ed25519.GenerateKey(src)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &Ed25519PrivateKey{sk: priv, pk: pub}, &Ed25519PublicKey{k: pub}, nil
 }
 
 func (k *Ed25519PrivateKey) Sign(msg []byte) ([]byte, error) {
@@ -54,22 +70,22 @@ func NewBlockchain() *Blockchain {
 	return &Blockchain{blocks: make([]*Block, 0)}
 }
 
-func (bc *Blockchain) InitializeGenesisBlock(d string) {
-	b := &Block{content: d}
+func (bc *Blockchain) InitializeGenesisBlock(tx *Transaction) {
+	b := &Block{tx: tx}
 	b.previousHash = "Genesis"
-	blockHash := hashBlock(fmt.Sprintf("%s||%s", d, b.previousHash))
+	blockHash := hashBlock(fmt.Sprintf("%s||%s", tx.signature, b.previousHash))
 	b.nonce, b.hash = proofOfWork(blockHash, workFactor)
 	bc.blocks = append(bc.blocks, b)
 	return
 }
 
-func (bc *Blockchain) AddBlocks(data []string) error {
+func (bc *Blockchain) AddBlocks(txs []*Transaction) error {
 	if bc.blocks == nil {
 		return fmt.Errorf("Must first initialize a genesis block")
 	}
 
-	for i, d := range data {
-		b := &Block{content: d}
+	for i, tx := range txs {
+		b := &Block{tx: tx}
 		var pb *Block
 		if i == 0 {
 			pb = bc.blocks[0]
@@ -78,7 +94,7 @@ func (bc *Blockchain) AddBlocks(data []string) error {
 		}
 
 		b.previousHash = pb.hash
-		concat := fmt.Sprintf("%s||%s", d, b.previousHash)
+		concat := fmt.Sprintf("%s||%s", tx.signature, b.previousHash)
 		b.nonce, b.hash = proofOfWork(hashBlock(concat), workFactor)
 
 		bc.blocks = append(bc.blocks, b)
@@ -127,13 +143,64 @@ func verify(challenge string, workFactor int, token int64) bool {
 	return strings.EqualFold(string(output[:workFactor]), zeros)
 }
 
-func main() {
-	data := strings.Split("this is a string", " ")
-	b := NewBlockchain()
-	b.InitializeGenesisBlock(data[0])
-	b.AddBlocks(data[1:])
-	fmt.Println("Printing Blockchain...")
-	for _, block := range b.blocks {
-		fmt.Printf("Content: %s, Hash: %s, PreviousHash: %s, Nonce: %d\n", block.content, block.hash, block.previousHash, block.nonce)
+func ValidateBlocks(bls []*Block) error {
+	for i, bl := range bls {
+		// verify pow
+		concat := fmt.Sprintf("%s||%s", bl.tx.signature, bl.previousHash)
+		if ok := verify(hashBlock(concat), workFactor, bl.nonce); !ok {
+			return fmt.Errorf("Failed on block (%d): %#v\n", i, bl)
+		}
+		// verify sig
+		ok, err := bl.tx.from.pubKey.Verify([]byte(strconv.Itoa(bl.tx.amount)), []byte(bl.tx.signature))
+		if err != nil {
+			return fmt.Errorf("Failed to verify with err: %s\n", err)
+		}
+		if !ok {
+			return fmt.Errorf("Failed on block (%d): %#v\n", i, bl)
+		}
 	}
+	return nil
+}
+
+func main() {
+	accounts := []*Account{
+		{name: "Jenn"},
+		{name: "Radhika"},
+		{name: "Raghav"},
+		{name: "Rajni"},
+		{name: "Ravi"},
+	}
+	for _, account := range accounts {
+		priv, pub, err := NewKey(crand.Reader)
+		if err != nil {
+			panic(err)
+		}
+		account.pubKey = pub
+		account.privKey = priv
+	}
+
+	txs := []*Transaction{
+		{from: accounts[0], to: accounts[1], amount: 5},
+		{from: accounts[1], to: accounts[2], amount: 4},
+		{from: accounts[2], to: accounts[3], amount: 3},
+		{from: accounts[3], to: accounts[4], amount: 2},
+		{from: accounts[4], to: accounts[0], amount: 1},
+	}
+
+	for _, tx := range txs {
+		sig, err := tx.from.privKey.Sign([]byte(strconv.Itoa(tx.amount)))
+		if err != nil {
+			panic(fmt.Sprintf("Signing err: %s\n", err))
+		}
+		tx.signature = string(sig)
+	}
+
+	b := NewBlockchain()
+	b.InitializeGenesisBlock(txs[0])
+	b.AddBlocks(txs[1:])
+	fmt.Println("Validating Blockchain...")
+	if err := ValidateBlocks(b.blocks); err != nil {
+		fmt.Printf("Failed to ValidateBlocks with err: %s\n", err)
+	}
+	fmt.Println("Blockchain Valid")
 }
