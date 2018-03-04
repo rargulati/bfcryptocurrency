@@ -22,7 +22,8 @@ type Block struct {
 }
 
 type Blockchain struct {
-	blocks []*Block
+	blocks   []*Block
+	accounts map[string]int // account balance
 }
 
 type Transaction struct {
@@ -67,14 +68,34 @@ func (k *Ed25519PublicKey) Verify(data []byte, sig []byte) (bool, error) {
 }
 
 func NewBlockchain() *Blockchain {
-	return &Blockchain{blocks: make([]*Block, 0)}
+	return &Blockchain{blocks: make([]*Block, 0), accounts: make(map[string]int)}
+}
+
+func (bc *Blockchain) updateAccountBalance(from, to *Account, value int) error {
+	fromBalance, ok := bc.accounts[from.name]
+	if !ok {
+		return fmt.Errorf("No account with name %s exists", from.name)
+	}
+	if fromBalance-value < 0 {
+		return fmt.Errorf("Can't send %d coins; will put %s in negative\n", value, from.name)
+	}
+
+	bc.accounts[from.name] = fromBalance - value
+	if toBalance, ok := bc.accounts[to.name]; !ok {
+		bc.accounts[to.name] = value
+	} else {
+		bc.accounts[to.name] = toBalance + value
+	}
+	return nil
 }
 
 func (bc *Blockchain) InitializeGenesisBlock(tx *Transaction) {
+	bc.accounts[tx.from.name] = tx.amount
 	b := &Block{tx: tx}
 	b.previousHash = "Genesis"
 	blockHash := hashBlock(fmt.Sprintf("%s||%s", tx.signature, b.previousHash))
 	b.nonce, b.hash = proofOfWork(blockHash, workFactor)
+	bc.updateAccountBalance(tx.from, tx.to, tx.amount)
 	bc.blocks = append(bc.blocks, b)
 	return
 }
@@ -96,6 +117,7 @@ func (bc *Blockchain) AddBlocks(txs []*Transaction) error {
 		b.previousHash = pb.hash
 		concat := fmt.Sprintf("%s||%s", tx.signature, b.previousHash)
 		b.nonce, b.hash = proofOfWork(hashBlock(concat), workFactor)
+		bc.updateAccountBalance(tx.from, tx.to, tx.amount)
 
 		bc.blocks = append(bc.blocks, b)
 	}
@@ -202,5 +224,11 @@ func main() {
 	if err := ValidateBlocks(b.blocks); err != nil {
 		fmt.Printf("Failed to ValidateBlocks with err: %s\n", err)
 	}
+	fmt.Println("Print out Blockchain accounts")
+
+	for name, value := range b.accounts {
+		fmt.Printf("Account %s with value %d\n", name, value)
+	}
+
 	fmt.Println("Blockchain Valid")
 }
