@@ -184,6 +184,13 @@ func ValidateBlocks(bls []*Block) error {
 	return nil
 }
 
+func ForkChoiceRule(bc1, bc2 *Blockchain) *Blockchain {
+	if len(bc1.blocks) > len(bc2.blocks) {
+		return bc1
+	}
+	return bc2
+}
+
 func main() {
 	accounts := []*Account{
 		{name: "Jenn"},
